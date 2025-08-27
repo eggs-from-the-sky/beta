@@ -9,6 +9,7 @@ body, html {
     background-color: #000000;
     overflow: hidden;
     font-family: "Arvo";
+    user-select: none;
 }
 
 @keyframes scrollBg {
@@ -28,6 +29,7 @@ body, html {
     background-image: url('textures/black-bars.svg');
     background-repeat: no-repeat;
     background-size: cover;
+    will-change: transform;
 }
 
 .wrapper {
@@ -36,6 +38,7 @@ body, html {
     left: 50%;
     transform: translate(-50%, -50%);
     overflow: hidden;
+    will-change: transform;
 }
 
 .game {
@@ -55,6 +58,7 @@ body, html {
     background-size: auto 100%;
     animation: scrollBg 40s linear infinite;
     z-index: -100;
+    will-change: background-position;
 }
 
 .ground {
@@ -72,10 +76,12 @@ body, html {
 .player {
     position: absolute;
     bottom: 200px;
+    left: 0px;
     width: 150px;
     height: 150px;
     background-image: url('textures/blue.svg');
     z-index: 100;
+    will-change: transform;
 }
 
 .player.dead {
@@ -93,12 +99,9 @@ body, html {
     height: 185px;
     background-image: url('textures/egg.svg');
     z-index: -50;
-    animation: rotate 6s linear infinite;
-}
-
-@keyframes rotate {
-    from {transform: rotate(0deg);}
-    to   {transform: rotate(360deg);}
+    top: 0px;
+    will-change: transform;
+    transform-origin: center;
 }
 
 .score {
