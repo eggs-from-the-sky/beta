@@ -90,7 +90,7 @@ const maxSpeed = 1000;
 const friction = 0.01;
 
 function updatePlayerPosition() {
-    player.style.left = `${playerX - playerWidth / 2}px`;
+    player.style.left = `${playerX - (playerWidth / 2)}px`;
 }
 
 const keys = {
