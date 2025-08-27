@@ -93,31 +93,49 @@ function updatePlayerPosition() {
     player.style.left = `${playerX - playerWidth / 2}px`;
 }
 
-let keys = { a: false, d: false };
+const keys = {
+  a: false,
+  d: false,
+  left: false,
+  right: false,
+};
 
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keys.a = true;
-    if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.d = true;
+  if (e.key === 'a' || e.key === 'A') keys.a = true;
+  if (e.key === 'd' || e.key === 'D') keys.d = true;
+  if (e.key === 'ArrowLeft') keys.left = true;
+  if (e.key === 'ArrowRight') keys.right = true;
 });
 
 document.addEventListener('keyup', (e) => {
-    if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft') keys.a = false;
-    if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') keys.d = false;
+  if (e.key === 'a' || e.key === 'A') keys.a = false;
+  if (e.key === 'd' || e.key === 'D') keys.d = false;
+  if (e.key === 'ArrowLeft') keys.left = false;
+  if (e.key === 'ArrowRight') keys.right = false;
 });
 
-document.addEventListener('touchstart', (e) => {
-    // Check the first touch point
-    const touchX = e.touches[0].clientX;
+const activeTouches = new Set();
 
-    if (touchX < window.innerWidth / 2) {
-        keys.a = true;  // left side → move left
+document.addEventListener('touchstart', (e) => {
+  for (let touch of e.changedTouches) {
+    if (touch.clientX < window.innerWidth / 2) {
+      activeTouches.add('left');
     } else {
-        keys.d = true;  // right side → move right
+      activeTouches.add('right');
     }
+  }
 });
 
 document.addEventListener('touchend', (e) => {
-    // Stop movement when touch ends
+  for (let touch of e.changedTouches) {
+    if (touch.clientX < window.innerWidth / 2) {
+      activeTouches.delete('left');
+    } else {
+      activeTouches.delete('right');
+    }
+  }
+});
+document.addEventListener('touchend', (e) => {
     keys.a = false;
     keys.d = false;
 });
@@ -145,12 +163,6 @@ function addEgg() {
 
         recentEggs = eggs.slice(-1);
     } while (recentEggs.some(e => Math.abs(parseFloat(e.dataset.x) - x) < minSpacing));
-
-    egg.style.left = `${x}px`;
-    egg.style.top = `-160px`;
-
-    const delay = Math.random() * 6;
-    egg.style.animationDelay = `-${delay}s`;
 
 
     egg.dataset.x = x;
@@ -185,8 +197,7 @@ function updateEggs(delta) {
 
         egg.dataset.y = y;
         egg.dataset.angle = angle;
-
-        egg.style.top = `${y}px`;
+        egg.style.transform = `translate(${x}px, ${y}px) rotate(${angle}deg)`;
 
         const eggRadius = 50;
         const eggCenterX = x + eggWidth / 2;
@@ -224,13 +235,16 @@ function gameLoop(now = performance.now()) {
     const delta = (now - lastTime) / 1000;
     lastTime = now;
 
-    if (keys.a) playerVel -= moveSpeed * delta;
-    if (keys.d) playerVel += moveSpeed * delta;
+    const leftActive  = keys.a || keys.left || activeTouches.has('left');
+    const rightActive = keys.d || keys.right || activeTouches.has('right');
+
+    if (leftActive) playerVel -= moveSpeed * delta;
+    if (rightActive) playerVel += moveSpeed * delta;
 
     if (playerVel > maxSpeed) playerVel = maxSpeed;
     if (playerVel < -maxSpeed) playerVel = -maxSpeed;
 
-    if (!keys.a && !keys.d) {
+    if (leftActive == rightActive) {
         const frictionFactor = Math.pow(friction, delta * 3);
         playerVel *= frictionFactor;
 
