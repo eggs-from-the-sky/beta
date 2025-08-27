@@ -183,8 +183,8 @@ function circleCollision(x1, y1, r1, x2, y2, r2) {
 
 function updateEggs(delta) {
     const playerRadius = playerWidth / 2;
-    const playerCenterX = playerX + (playerRadius / 2);
-    const playerCenterY = 1080 - 200 - (playerRadius / 2);
+    const playerCenterX = playerX + playerRadius;
+    const playerCenterY = 1080 - 200 - playerRadius;
 
     for (let i = eggs.length - 1; i >= 0; i--) {
         const egg = eggs[i];
@@ -199,9 +199,9 @@ function updateEggs(delta) {
         egg.dataset.angle = angle;
         egg.style.transform = `translate(${x}px, ${y}px) rotate(${angle}deg)`;
 
-        const eggRadius = 50;
-        const eggCenterX = x + eggWidth / 2;
-        const eggCenterY = y + eggHeight / 2;
+        const eggRadius = 35;
+        const eggCenterX = x + ((Math.cos(angle * (Math.PI / 180)) * 35)) + (eggWidth / 2);
+        const eggCenterY = y + ((Math.sin(angle * (Math.PI / 180)) * 35)) + (eggHeight / 2);
 
         if (circleCollision(playerCenterX, playerCenterY, playerRadius, eggCenterX, eggCenterY, eggRadius)) {
             if (gameOver) continue;
@@ -238,20 +238,28 @@ function gameLoop(now = performance.now()) {
     const leftActive  = keys.a || keys.left || activeTouches.has('left');
     const rightActive = keys.d || keys.right || activeTouches.has('right');
 
-    if (leftActive) playerVel -= moveSpeed * delta;
-    if (rightActive) playerVel += moveSpeed * delta;
 
-    if (playerVel > maxSpeed) playerVel = maxSpeed;
-    if (playerVel < -maxSpeed) playerVel = -maxSpeed;
+    if (!gameOver) {
+        if (leftActive) playerVel -= moveSpeed * delta;
+        if (rightActive) playerVel += moveSpeed * delta;
 
-    if (leftActive == rightActive) {
-        const frictionFactor = Math.pow(friction, delta * 3);
-        playerVel *= frictionFactor;
+        if (playerVel > maxSpeed) playerVel = maxSpeed;
+        if (playerVel < -maxSpeed) playerVel = -maxSpeed;
 
+        if (leftActive == rightActive) {
+            const frictionFactor = Math.pow(friction, delta * 3);
+            playerVel *= frictionFactor;
+
+            if (Math.abs(playerVel) < 0.01) playerVel = 0;
+        }
+    }
+
+    if (gameOver) {
+        playerVel *= Math.pow(friction, delta * 0.9);
         if (Math.abs(playerVel) < 0.01) playerVel = 0;
     }
 
-    if (!gameOver) {playerX += playerVel * delta;}
+    playerX += playerVel * delta;
     playerX = Math.max(playerWidth / 2, Math.min(gameWidth - (playerWidth / 2), playerX));
 
     updateEggs(delta);
