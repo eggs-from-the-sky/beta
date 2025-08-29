@@ -1,38 +1,22 @@
-function scaleGame() {
-    const game = document.querySelector('.game');
-    const wrapper = document.querySelector('.wrapper');
-    const blackBars = document.querySelector('.black-bars');
-    const scaleX = window.innerWidth / 1919;
-    const scaleY = window.innerHeight / 1079;
-    const scale = Math.min(scaleX, scaleY);
-    wrapper.style.transform = `translate(-50%, -50%) scale(${scale})`;
+// #region wrapper scaling
 
-    const barsScaleX = window.innerWidth / 1919;
-    const barsScaleY = window.innerHeight / 1079;
-    const barsScale = Math.min(barsScaleX, barsScaleY);
-    blackBars.style.transform = `translate(-50%, -50%) scale(${barsScale})`;
+function scaleGame() {
+    const wrappers = document.querySelectorAll('.wrapper');
+    const scaleX = window.innerWidth / 1920;
+    const scaleY = window.innerHeight / 1080;
+    const scale = Math.min(scaleX, scaleY);
+
+    wrappers.forEach(wrapper => {
+        wrapper.style.transform = `scale(${scale}) translate(-50%, -50%) `; 
+    });
 }
 window.addEventListener('resize', scaleGame);
-window.addEventListener('DOMContentLoaded', scaleGame);
 
-function goFullscreen() {
-    const elem = document.documentElement;
-    if (elem.requestFullscreen) {
-        elem.requestFullscreen();
-    } else if (elem.webkitRequestFullscreen) {
-        elem.webkitRequestFullscreen();
-    } else if (elem.msRequestFullscreen) {
-        elem.msRequestFullscreen();
-    }
-}
+scaleGame();
 
-document.body.addEventListener('click', () => {
-    goFullscreen();
-});
+// #endregion
 
-document.body.addEventListener('touchstart', () => {
-    goFullscreen();
-});
+// #region music
 
 const musicFiles = [
     "music/candyland.mp3",
@@ -60,212 +44,322 @@ function playRandomTrack() {
     let randomIndex;
     do {
         randomIndex = Math.floor(Math.random() * musicFiles.length);
-    } while (musicFiles.length > 1 && randomIndex === lastTrackIndex);
+    } while (randomIndex === lastTrackIndex);
     lastTrackIndex = randomIndex;
     audio.src = musicFiles[randomIndex];
-    audio.load();
     audio.play();
 }
-
 audio.addEventListener('ended', playRandomTrack);
 
-document.body.addEventListener('click', function() {
+window.addEventListener('click', () => {
     playRandomTrack();
-}, { once: true });
+}, {
+    once: true
+});
 
-document.body.addEventListener('touchstart', function() {
-    playRandomTrack();
-}, { once: true });
+// #endregion
 
-let score = 0;
-const scoreElement = document.getElementById('score');
+// #region canvas setup
 
-const player = document.getElementById('player');
-let playerX = 960;
-let playerVel = 0;
-const playerWidth = 150;
-const gameWidth = 1920;
-const moveSpeed = 10000;
-const maxSpeed = 1000;
-const friction = 0.01;
+// initialize canvas and context
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-function updatePlayerPosition() {
-    player.style.left = `${playerX - (playerWidth / 2)}px`;
+let scaleFactor = 1;
+let width = canvas.width;
+let height = canvas.height;
+
+// resize canvas to window size
+function resizeCanvas() {
+    const vWidth = window.innerWidth;
+    const vHeight = window.innerHeight;
+
+    // maintain 16:9 aspect ratio
+    if (vWidth / vHeight > 16 / 9) {
+        canvas.width = vHeight * (16 / 9);
+        canvas.height = vHeight;
+    } else {
+        canvas.width = vWidth;
+        canvas.height = vWidth * (9 / 16);
+    }
+
+    width = canvas.width;
+    height = canvas.height;
+
+    // calculate scale factor based on original size (1920x1080)
+    scaleFactor = canvas.width / 1920;
+    ctx.setTransform(scaleFactor, 0, 0, scaleFactor, 0, 0); // scale the context
 }
 
-const keys = {
-  a: false,
-  d: false,
-  left: false,
-  right: false,
-};
+window.addEventListener('resize', resizeCanvas);
 
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'a' || e.key === 'A') keys.a = true;
-  if (e.key === 'd' || e.key === 'D') keys.d = true;
-  if (e.key === 'ArrowLeft') keys.left = true;
-  if (e.key === 'ArrowRight') keys.right = true;
-});
+resizeCanvas(); // initial resize
 
-document.addEventListener('keyup', (e) => {
-  if (e.key === 'a' || e.key === 'A') keys.a = false;
-  if (e.key === 'd' || e.key === 'D') keys.d = false;
-  if (e.key === 'ArrowLeft') keys.left = false;
-  if (e.key === 'ArrowRight') keys.right = false;
-});
+// #endregion
 
-const activeTouches = new Set();
+// #region variables
 
-document.addEventListener('touchstart', (e) => {
-  for (let touch of e.changedTouches) {
-    if (touch.clientX < window.innerWidth / 2) {
-      activeTouches.add('left');
-    } else {
-      activeTouches.add('right');
-    }
-  }
-});
+// logic variables
 
-document.addEventListener('touchend', (e) => {
-  for (let touch of e.changedTouches) {
-    if (touch.clientX < window.innerWidth / 2) {
-      activeTouches.delete('left');
-    } else {
-      activeTouches.delete('right');
-    }
-  }
-});
-document.addEventListener('touchend', (e) => {
-    keys.a = false;
-    keys.d = false;
-});
-
-let lastTime = performance.now();
+let lastTime = 0;
+let deltaTime = 0;
 
 let gameOver = false;
+let gameScene = "game";
+let gamePaused = false;
 
+let score = 0;
+
+let eggs = [];
+let eggSpawnTimer = 0;
+
+// game variables
+
+// ball properties
+const ballWidth = 150;
+const ballHeight = 150;
+
+const ballMaxSpeed = 1000;
+const ballAcceleration = 10000;
+
+let ballSpeed = 0;
+let ballX = 960;
+const ballY = 1080 - (ballHeight / 2) - 200;
+
+const ballFriction = 0.01;
+const ballFrictionMultipler = 3;
+
+// egg properties
 const eggWidth = 150;
 const eggHeight = 185;
+
+const eggSpawnInterval = 125;
 const eggFallSpeed = 800;
 const eggSpinSpeed = 60;
 
-let eggs = [];
+// #endregion
 
-const minSpacing = 200;
+// #region input handling
 
+const keys = {
+    a: false,
+    d: false,
+    left: false,
+    right: false,
+};
+
+// check for key presses
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'a' || e.key === 'A') keys.a = true;
+    if (e.key === 'd' || e.key === 'D') keys.d = true;
+    if (e.key === 'ArrowLeft') keys.left = true;
+    if (e.key === 'ArrowRight') keys.right = true;
+});
+
+document.addEventListener('keyup', (e) => {
+    if (e.key === 'a' || e.key === 'A') keys.a = false;
+    if (e.key === 'd' || e.key === 'D') keys.d = false;
+    if (e.key === 'ArrowLeft') keys.left = false;
+    if (e.key === 'ArrowRight') keys.right = false;
+});
+
+// list of active touches
+const activeTouches = new Set();
+
+document.addEventListener('touchstart', (e) => {
+    for (let touch of e.changedTouches) {
+        if (touch.clientX < window.innerWidth / 2) {
+            activeTouches.add('left');
+        } else {
+            activeTouches.add('right');
+        }
+    }
+});
+
+document.addEventListener('touchend', (e) => {
+    for (let touch of e.changedTouches) {
+        if (touch.clientX < window.innerWidth / 2) {
+            activeTouches.delete('left');
+        } else {
+            activeTouches.delete('right');
+        }
+    }
+});
+
+// #endregion
+
+// #region game logic
+
+// update ball position and speed
+function updateBall(deltaTime) {
+    // handle input
+    const leftActive = keys.a || keys.left || activeTouches.has('left');
+    const rightActive = keys.d || keys.right || activeTouches.has('right');
+
+    if (leftActive) {
+        ballSpeed -= ballAcceleration * (deltaTime / 1000);
+    }
+    if (rightActive) {
+        ballSpeed += ballAcceleration * (deltaTime / 1000);
+    }
+    // apply friction
+    if (leftActive == rightActive) {
+        ballSpeed *= Math.pow(ballFriction, (deltaTime / 1000) * ballFrictionMultipler);
+    }
+
+    // clamp speed
+    if (ballSpeed > ballMaxSpeed) ballSpeed = ballMaxSpeed;
+    if (ballSpeed < -ballMaxSpeed) ballSpeed = -ballMaxSpeed;
+
+    // update position
+    ballX += ballSpeed * (deltaTime / 1000);
+
+    // clamp position
+    if (ballX < ballWidth / 2) {
+        ballX = ballWidth / 2;
+        ballSpeed = 0;
+    }
+    if (ballX > 1920 - (ballWidth / 2)) {
+        ballX = 1920 - (ballWidth / 2);
+        ballSpeed = 0;
+    }
+}
+
+// spawn an egg
 function addEgg() {
-    const egg = document.createElement('div');
-    egg.className = 'egg';
+    // calculate egg position and rotation
 
     let x;
     do {
-        x = Math.random() * ((gameWidth - (eggWidth * 2) + eggWidth));
-
+        x = Math.random() * ((1920 - (eggWidth)) + (eggWidth / 2));
         recentEggs = eggs.slice(-1);
-    } while (recentEggs.some(e => Math.abs(parseFloat(e.dataset.x) - x) < minSpacing));
+    } while (recentEggs.some(e => Math.abs(e.x - x) < 200));
 
+    const egg = {
+        x: x,
+        y: -eggHeight,
+        angle: Math.random() * 360,
+    };
 
-    egg.dataset.x = x;
-    egg.dataset.y = -eggHeight;
-    egg.dataset.angle = Math.random() * 360;
-    document.querySelector('.game').appendChild(egg);
+    // add egg to array
     eggs.push(egg);
 }
 
-setInterval(addEgg, 125);
-
-function circleCollision(x1, y1, r1, x2, y2, r2) {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    return distance < r1 + r2;
-}
-
-function updateEggs(delta) {
-    const playerRadius = playerWidth / 2;
-    const playerCenterX = playerX + playerRadius;
-    const playerCenterY = 1080 - 200 - playerRadius;
-
+function updateEggs(deltaTime) {
     for (let i = eggs.length - 1; i >= 0; i--) {
         const egg = eggs[i];
-        let x = parseFloat(egg.dataset.x);
-        let y = parseFloat(egg.dataset.y);
-        let angle = parseFloat(egg.dataset.angle);
 
-        y += eggFallSpeed * delta;
-        angle += eggSpinSpeed * delta;
+        // update position and rotation
+        egg.y += eggFallSpeed * (deltaTime / 1000);
+        egg.angle += eggSpinSpeed * (deltaTime / 1000);
+        if (egg.angle >= 360) egg.angle -= 360;
 
-        egg.dataset.y = y;
-        egg.dataset.angle = angle;
-        egg.style.transform = `translate(${x}px, ${y}px) rotate(${angle}deg)`;
-
-        const eggRadius = 35;
-        const eggCenterX = x + ((Math.cos(angle * (Math.PI / 180)) * 35)) + (eggWidth / 2);
-        const eggCenterY = y + ((Math.sin(angle * (Math.PI / 180)) * 35)) + (eggHeight / 2);
-
-        if (circleCollision(playerCenterX, playerCenterY, playerRadius, eggCenterX, eggCenterY, eggRadius)) {
-            if (gameOver) continue;
-            gameOver = true;
-            player.classList.add('dead');
-
-            setTimeout(() => {
-                player.classList.remove('dead');
-                playerX = 960;
-                playerVel = 0;
-                score = 0;
-                scoreElement.textContent = score;
-                gameOver = false;
-                eggs.forEach(egg => egg.remove());
-                eggs = [];
-            }, 1000);
-                    continue;
-                }
-
-        if (y > 880) {
-            egg.remove();
-            eggs.splice(i, 1);
-            if (gameOver) continue;
+        // remove egg if it falls off screen
+        if (egg.y > 880 + eggHeight) {
             score++;
-            scoreElement.textContent = score;
+            eggs.splice(i, 1);
+            continue;
         }
     }
 }
 
-function gameLoop(now = performance.now()) {
-    const delta = (now - lastTime) / 1000;
-    lastTime = now;
+// #endregion
 
-    const leftActive  = keys.a || keys.left || activeTouches.has('left');
-    const rightActive = keys.d || keys.right || activeTouches.has('right');
+// #region game loop
 
+const ballTexture = new Image();
+ballTexture.src = 'textures/blue.svg';
 
-    if (!gameOver) {
-        if (leftActive) playerVel -= moveSpeed * delta;
-        if (rightActive) playerVel += moveSpeed * delta;
+const eggTexture = new Image();
+eggTexture.src = 'textures/egg.svg';
 
-        if (playerVel > maxSpeed) playerVel = maxSpeed;
-        if (playerVel < -maxSpeed) playerVel = -maxSpeed;
+const backgroundTexture = new Image();
+backgroundTexture.src = 'textures/background.svg';
 
-        if (leftActive == rightActive) {
-            const frictionFactor = Math.pow(friction, delta * 3);
-            playerVel *= frictionFactor;
+const groundTexture = new Image();
+groundTexture.src = 'textures/ground.svg';
 
-            if (Math.abs(playerVel) < 0.01) playerVel = 0;
+function gameLoop(timestamp) {
+    if (!lastTime) lastTime = timestamp;
+    deltaTime = timestamp - lastTime;
+    lastTime = timestamp;
+
+    if (!gamePaused && gameScene == "game" && !gameOver) {
+        updateBall(deltaTime);
+    }
+
+    if (!gamePaused && gameScene == "game") {
+        eggSpawnTimer += deltaTime;
+        if (eggSpawnTimer >= eggSpawnInterval) {
+            addEgg();
+            eggSpawnTimer = 0;
         }
+
+        updateEggs(deltaTime);
     }
 
-    if (gameOver) {
-        playerVel *= Math.pow(friction, delta * 0.9);
-        if (Math.abs(playerVel) < 0.01) playerVel = 0;
+    // clear canvas
+    ctx.clearRect(0, 0, width / scaleFactor, height / scaleFactor);
+
+    // draw game shadows
+    if (gameScene === "game") {
+        // draw ball
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 20 * scaleFactor;
+        ctx.shadowOffsetY = 20 * scaleFactor;
+        ctx.drawImage(ballTexture, ballX - ballWidth / 2, ballY - ballHeight / 2, ballWidth, ballHeight);
+        ctx.restore();
+
+        // draw eggs
+        eggs.forEach(egg => {
+            ctx.save();
+            ctx.translate(egg.x, egg.y);
+            ctx.rotate(egg.angle * Math.PI / 180);
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 20 * scaleFactor;
+            ctx.shadowOffsetY = 20 * scaleFactor;
+            ctx.drawImage(eggTexture, -eggWidth / 2, -eggHeight / 2, eggWidth, eggHeight);
+            ctx.restore();
+        });
+
+        // draw ground
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 30 * scaleFactor;
+        ctx.drawImage(groundTexture, 0, 0, 1920, 1080);
+        ctx.restore();
+    }
+    
+    // draw game objects
+    if (gameScene === "game") {
+        // draw ball
+        ctx.save();
+        ctx.drawImage(ballTexture, ballX - ballWidth / 2, ballY - ballHeight / 2, ballWidth, ballHeight);
+        ctx.restore();
+
+        // draw eggs
+        eggs.forEach(egg => {
+            ctx.save();
+            ctx.translate(egg.x, egg.y);
+            ctx.rotate(egg.angle * Math.PI / 180);;
+            ctx.drawImage(eggTexture, -eggWidth / 2, -eggHeight / 2, eggWidth, eggHeight);
+            ctx.restore();
+        });
+
+        // draw ground
+        ctx.save();
+        ctx.drawImage(groundTexture, 0, 0, 1920, 1080);
+        ctx.restore();
+
+        document.getElementById('score').textContent = score;
     }
 
-    playerX += playerVel * delta;
-    playerX = Math.max(playerWidth / 2, Math.min(gameWidth - (playerWidth / 2), playerX));
-
-    updateEggs(delta);
-
-    updatePlayerPosition();
     requestAnimationFrame(gameLoop);
 }
 
-gameLoop();
+requestAnimationFrame(gameLoop);
+
+// #endregion
