@@ -57,6 +57,20 @@ window.addEventListener('click', () => {
     once: true
 });
 
+window.addEventListener('touchstart', () => {
+    playRandomTrack();
+}, {
+    once: true
+});
+
+window.addEventListener('click', () => {
+    document.body.requestFullscreen();
+});
+
+window.addEventListener('touchstart', () => {
+    document.body.requestFullscreen();
+});
+
 // #endregion
 
 // #region canvas setup
