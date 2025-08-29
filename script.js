@@ -79,6 +79,9 @@ window.addEventListener('touchstart', () => {
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+const collisionCanvas = document.getElementById('collisionCanvas');
+const cctx = collisionCanvas.getContext('2d');
+
 let scaleFactor = 1;
 let width = canvas.width;
 let height = canvas.height;
@@ -147,7 +150,7 @@ const ballFrictionMultipler = 3;
 const eggWidth = 150;
 const eggHeight = 185;
 
-const eggSpawnInterval = 125;
+const eggSpawnInterval = 150;
 const eggFallSpeed = 800;
 const eggSpinSpeed = 60;
 
@@ -270,11 +273,69 @@ function updateEggs(deltaTime) {
 
         // remove egg if it falls off screen
         if (egg.y > 880 + eggHeight) {
-            score++;
+
+            if (!gameOver) {score++;}
             eggs.splice(i, 1);
             continue;
         }
     }
+}
+
+// collision detection
+function getNearbyEggs() {
+    return eggs.filter(egg => {
+        const dx = egg.x - ballX;
+        const dy = egg.y - ballY;
+        return Math.sqrt(dx*dx + dy*dy) < 75 + 75;
+    });
+}
+
+function renderCollisionRegion(nearbyEggs) {
+    cctx.clearRect(0, 0, 150, 150);
+    cctx.save();
+    cctx.translate(-ballX + 75, -ballY + 75);
+
+    nearbyEggs.forEach(egg => {
+        cctx.drawImage(eggCollision, egg.x - 60, egg.y - 75);
+    });
+
+    cctx.restore();
+}
+
+function checkCollisions() {
+    const imgData = cctx.getImageData(0, 0, 150, 150).data;
+    for (let y = -75; y < 75; y++) {
+        for (let x = -75; x < 75; x++) {
+            if (x*x + y*y <= 75*75) { // inside ball
+                const px = 75 + x;
+                const py = 75 + y;
+                const idx = (py * 150 + px) * 4;
+                
+                // bounds check
+                if (px < 0 || px >= 150 || py < 0 || py >= 150) continue;
+
+                if (imgData[idx + 3] > 0) return true; // collision
+            }
+        }
+    }
+    return false; // no collision
+}
+
+function detectCollision() {
+    const nearbyEggs = getNearbyEggs();
+    if (nearbyEggs.length === 0) return false;
+
+    renderCollisionRegion(nearbyEggs);
+    return checkCollisions();
+}
+
+function resetGame() {
+    gameOver = false;
+    score = 0;
+    eggs = [];
+    eggSpawnTimer = 0;
+    ballX = 960;
+    ballSpeed = 0;
 }
 
 // #endregion
@@ -286,6 +347,9 @@ ballTexture.src = 'textures/blue.svg';
 
 const eggTexture = new Image();
 eggTexture.src = 'textures/egg.svg';
+
+const eggCollision = new Image();
+eggCollision.src = 'textures/egg-collision.svg';
 
 const backgroundTexture = new Image();
 backgroundTexture.src = 'textures/background.svg';
@@ -312,19 +376,24 @@ function gameLoop(timestamp) {
         updateEggs(deltaTime);
     }
 
+    
+
     // clear canvas
     ctx.clearRect(0, 0, width / scaleFactor, height / scaleFactor);
 
     // draw game shadows
     if (gameScene === "game") {
-        // draw ball
-        ctx.save();
-        ctx.shadowColor = 'rgba(0,0,0,0.5)';
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetX = 20 * scaleFactor;
-        ctx.shadowOffsetY = 20 * scaleFactor;
-        ctx.drawImage(ballTexture, ballX - ballWidth / 2, ballY - ballHeight / 2, ballWidth, ballHeight);
-        ctx.restore();
+        
+        if (!gameOver) {
+            // draw ball
+            ctx.save();
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 20 * scaleFactor;
+            ctx.shadowOffsetY = 20 * scaleFactor;
+            ctx.drawImage(ballTexture, ballX - ballWidth / 2, ballY - ballHeight / 2, ballWidth, ballHeight);
+            ctx.restore();
+        }
 
         // draw eggs
         eggs.forEach(egg => {
@@ -342,17 +411,19 @@ function gameLoop(timestamp) {
         // draw ground
         ctx.save();
         ctx.shadowColor = 'rgba(0,0,0,0.5)';
-        ctx.shadowBlur = 30 * scaleFactor;
+        ctx.shadowBlur = 20 * scaleFactor;
         ctx.drawImage(groundTexture, 0, 0, 1920, 1080);
         ctx.restore();
     }
     
     // draw game objects
     if (gameScene === "game") {
-        // draw ball
-        ctx.save();
-        ctx.drawImage(ballTexture, ballX - ballWidth / 2, ballY - ballHeight / 2, ballWidth, ballHeight);
-        ctx.restore();
+        if (!gameOver) {
+            // draw ball
+            ctx.save();
+            ctx.drawImage(ballTexture, ballX - ballWidth / 2, ballY - ballHeight / 2, ballWidth, ballHeight);
+            ctx.restore();
+        }
 
         // draw eggs
         eggs.forEach(egg => {
@@ -369,6 +440,11 @@ function gameLoop(timestamp) {
         ctx.restore();
 
         document.getElementById('score').textContent = score;
+
+        if (detectCollision() && !gameOver) {
+            gameOver = true;
+            setTimeout(resetGame, 1000);
+        }
     }
 
     requestAnimationFrame(gameLoop);
