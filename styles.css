@@ -57,3 +57,7 @@ canvas {
     width: 1920px;
     user-select: none;
 }
+
+#collisionCanvas {
+    display: none;
+}
