@@ -143,6 +143,12 @@ let ballSpeed = 0;
 let ballX = 960;
 const ballY = 1080 - (ballHeight / 2) - 200;
 
+let ballDeathStart = 0;        // timestamp when death animation starts
+let ballDeathDuration = 1000;  // duration of death scaling (ms)
+let ballScale = 1;             // current scale
+let ballAlpha = 1;             // current opacity of the ball
+
+
 const ballFriction = 0.01;
 const ballFrictionMultipler = 3;
 
@@ -210,17 +216,23 @@ document.addEventListener('touchend', (e) => {
 // update ball position and speed
 function updateBall(deltaTime) {
     // handle input
-    const leftActive = keys.a || keys.left || activeTouches.has('left');
-    const rightActive = keys.d || keys.right || activeTouches.has('right');
 
-    if (leftActive) {
-        ballSpeed -= ballAcceleration * (deltaTime / 1000);
+    let leftActive = keys.a || keys.left || activeTouches.has('left');
+    let rightActive = keys.d || keys.right || activeTouches.has('right');
+
+    if (!gameOver) {
+        if (leftActive) {
+            ballSpeed -= ballAcceleration * (deltaTime / 1000);
+        }
+        if (rightActive) {
+            ballSpeed += ballAcceleration * (deltaTime / 1000);
+        }
     }
-    if (rightActive) {
-        ballSpeed += ballAcceleration * (deltaTime / 1000);
-    }
+
     // apply friction
-    if (leftActive == rightActive) {
+    if (gameOver) {
+        ballSpeed *= Math.pow(ballFriction, (deltaTime / 1000) * ballFrictionMultipler / 2);
+    } else if (leftActive == rightActive) {
         ballSpeed *= Math.pow(ballFriction, (deltaTime / 1000) * ballFrictionMultipler);
     }
 
@@ -245,7 +257,6 @@ function updateBall(deltaTime) {
 // spawn an egg
 function addEgg() {
     // calculate egg position and rotation
-
     let x;
     do {
         x = Math.random() * ((1920 - (eggWidth)) + (eggWidth / 2));
@@ -338,6 +349,41 @@ function resetGame() {
     ballSpeed = 0;
 }
 
+// cubic-bezier easing function
+function cubicBezier(x1, y1, x2, y2) {
+    const cx = 3 * x1;
+    const bx = 3 * (x2 - x1) - cx;
+    const ax = 1 - cx - bx;
+
+    const cy = 3 * y1;
+    const by = 3 * (y2 - y1) - cy;
+    const ay = 1 - cy - by;
+
+    function bezier(t, a, b, c) {
+        return ((a * t + b) * t + c) * t;
+    }
+
+    function getTforX(x) {
+        let t = x;
+        for (let i = 0; i < 5; i++) {
+            const f = bezier(t, ax, bx, cx) - x;
+            const df = 3 * ax * t * t + 2 * bx * t + cx;
+            if (df === 0) break;
+            t -= f / df;
+        }
+        return t;
+    }
+
+    return function(x) {
+        const t = getTforX(x);
+        return bezier(t, ay, by, cy);
+    };
+}
+
+// cubic-bezier(0, 0.5, 0.5, 1)
+const ballDeathEase = cubicBezier(0.2, 0.8, 0.2, 0.8);
+
+
 // #endregion
 
 // #region game loop
@@ -358,11 +404,23 @@ const groundTexture = new Image();
 groundTexture.src = 'textures/ground.svg';
 
 function gameLoop(timestamp) {
+    if (gameOver && ballDeathStart) {
+        const elapsed = lastTime - ballDeathStart;
+        let t = elapsed / ballDeathDuration;
+    if (t > 1) t = 1;
+        ballScale = 1 + ballDeathEase(t); // scale from 1 → 0
+        ballAlpha = 1 - ballDeathEase(t);
+    } else {
+        ballScale = 1;
+        ballAlpha = 1;
+    }
+
+
     if (!lastTime) lastTime = timestamp;
     deltaTime = timestamp - lastTime;
     lastTime = timestamp;
 
-    if (!gamePaused && gameScene == "game" && !gameOver) {
+    if (!gamePaused && gameScene == "game") {
         updateBall(deltaTime);
     }
 
@@ -383,16 +441,24 @@ function gameLoop(timestamp) {
 
     // draw game shadows
     if (gameScene === "game") {
-        
+        // draw ball
         if (!gameOver) {
-            // draw ball
-            ctx.save();
-            ctx.shadowColor = 'rgba(0,0,0,0.5)';
-            ctx.shadowBlur = 0;
-            ctx.shadowOffsetX = 20 * scaleFactor;
-            ctx.shadowOffsetY = 20 * scaleFactor;
-            ctx.drawImage(ballTexture, ballX - ballWidth / 2, ballY - ballHeight / 2, ballWidth, ballHeight);
-            ctx.restore();
+        ctx.save();
+        ctx.translate(ballX, ballY)
+        ctx.scale(ballScale, ballScale);
+        ctx.globalAlpha = ballAlpha;
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 20 * scaleFactor;
+        ctx.shadowOffsetY = 20 * scaleFactor;
+        ctx.drawImage(
+            ballTexture,
+            -ballWidth / 2,                    // offset by half width
+            -ballHeight / 2,                   // offset by half height
+            ballWidth,
+            ballHeight
+        );
+        ctx.restore();
         }
 
         // draw eggs
@@ -418,12 +484,20 @@ function gameLoop(timestamp) {
     
     // draw game objects
     if (gameScene === "game") {
-        if (!gameOver) {
-            // draw ball
-            ctx.save();
-            ctx.drawImage(ballTexture, ballX - ballWidth / 2, ballY - ballHeight / 2, ballWidth, ballHeight);
-            ctx.restore();
-        }
+        // draw ball
+        ctx.save();
+        ctx.translate(ballX, ballY);          // move origin to ball center
+        ctx.scale(ballScale, ballScale);      // scale around the center
+        ctx.globalAlpha = ballAlpha;  
+        ctx.drawImage(
+            ballTexture,
+            -ballWidth / 2,                    // offset by half width
+            -ballHeight / 2,                   // offset by half height
+            ballWidth,
+            ballHeight
+        );
+        ctx.restore();
+
 
         // draw eggs
         eggs.forEach(egg => {
@@ -443,6 +517,7 @@ function gameLoop(timestamp) {
 
         if (detectCollision() && !gameOver) {
             gameOver = true;
+            ballDeathStart = performance.now();
             setTimeout(resetGame, 1000);
         }
     }
