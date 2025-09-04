@@ -125,7 +125,10 @@ let gameOver = false;
 let gameScene = "game";
 let gamePaused = false;
 
+let gameResetTimer = -1;
+
 let score = 0;
+let highScore = 0;
 
 let eggs = [];
 let eggSpawnTimer = 0;
@@ -186,6 +189,25 @@ document.addEventListener('keyup', (e) => {
     if (e.key === 'ArrowRight') keys.right = false;
 });
 
+let pIsDown = false;
+
+document.addEventListener('keydown', function(event) {
+    if ((event.key === 'p' || event.key === 'P') && !pIsDown) {
+        pIsDown = true; // Mark the key as down
+        if (gamePaused) {
+            gamePaused = false;
+        } else {
+            gamePaused = true;
+        }
+    }
+});
+
+document.addEventListener('keyup', function(event) {
+    if (event.key === 'p' || event.key === 'P') {
+        pIsDown = false; // Reset when key is released
+    }
+});
+
 // list of active touches
 const activeTouches = new Set();
 
@@ -209,9 +231,19 @@ document.addEventListener('touchend', (e) => {
     }
 });
 
+document.addEventListener("visibilitychange", function() {
+    if (document.hidden) {
+        gamePaused = true;
+    }
+});
+
 // #endregion
 
 // #region game logic
+
+document.getElementById("resume-button").onclick = () => {
+    gamePaused = false;
+}
 
 // update ball position and speed
 function updateBall(deltaTime) {
@@ -347,6 +379,7 @@ function resetGame() {
     eggSpawnTimer = 0;
     ballX = 960;
     ballSpeed = 0;
+    gameResetTimer = -1;
 }
 
 // cubic-bezier easing function
@@ -383,6 +416,36 @@ function cubicBezier(x1, y1, x2, y2) {
 // cubic-bezier(0, 0.5, 0.5, 1)
 const ballDeathEase = cubicBezier(0.2, 0.8, 0.2, 0.8);
 
+const webAppUrl = "https://script.google.com/macros/s/AKfycbw6FqLFMCNSNzPE1qSBDz0_GyeEuhLyVDKaCjtQsfAdwR9FTC93lwff7nJMN51Zk2Gd/exec";
+
+// Send new score
+async function submitScore() {
+    try {
+        const response = await fetch(webAppUrl, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({score})
+        });
+        const result = await response.json();
+        highScore = result.highScore;
+    } catch (err) {
+        console.error("Error submitting score:", err);
+    }
+}
+
+// Get current high score
+async function updateHighScore() {
+    try {
+        const response = await fetch(webAppUrl);
+        const result = await response.json();
+        highScore = result.highScore;
+    } catch (err) {
+        console.error("Error fetching high score:", err);
+    }
+}
+
+// Load high score on page load
+updateHighScore();
 
 // #endregion
 
@@ -404,17 +467,24 @@ const groundTexture = new Image();
 groundTexture.src = 'textures/ground.svg';
 
 function gameLoop(timestamp) {
-    if (gameOver && ballDeathStart) {
-        const elapsed = lastTime - ballDeathStart;
-        let t = elapsed / ballDeathDuration;
-    if (t > 1) t = 1;
-        ballScale = 1 + ballDeathEase(t); // scale from 1 → 0
-        ballAlpha = 1 - ballDeathEase(t);
-    } else {
-        ballScale = 1;
-        ballAlpha = 1;
+    if (!gamePaused) {
+        if (gameOver && ballDeathStart) {
+            const elapsed = lastTime - ballDeathStart;
+            let t = elapsed / ballDeathDuration;
+        if (t > 1) t = 1;
+            ballScale = 1 + ballDeathEase(t); // scale from 1 → 0
+            ballAlpha = 1 - ballDeathEase(t);
+        } else {
+            ballScale = 1;
+            ballAlpha = 1;
+        }
     }
 
+    if (gamePaused) {
+        document.body.style.cursor = "default";
+    } else {
+        document.body.style.cursor = "none";
+    }
 
     if (!lastTime) lastTime = timestamp;
     deltaTime = timestamp - lastTime;
@@ -432,9 +502,20 @@ function gameLoop(timestamp) {
         }
 
         updateEggs(deltaTime);
+
+        if (gameResetTimer != -1) {
+            gameResetTimer += deltaTime
+            if (gameResetTimer > 1000) {
+                resetGame();
+            }
+        }
     }
 
-    
+    if (gamePaused) {
+        document.getElementById("pause").style.display = "block";
+    } else {
+        document.getElementById("pause").style.display = "none";
+    }
 
     // clear canvas
     ctx.clearRect(0, 0, width / scaleFactor, height / scaleFactor);
@@ -518,7 +599,10 @@ function gameLoop(timestamp) {
         if (detectCollision() && !gameOver) {
             gameOver = true;
             ballDeathStart = performance.now();
-            setTimeout(resetGame, 1000);
+            gameResetTimer = 0;
+            if (score > highScore) {
+                submitScore();
+            }
         }
     }
 
