@@ -1,6 +1,7 @@
 html, body {
     width: 100vw;
     height: 100vh;
+    cursor: none;
 }
 
 body {
@@ -60,4 +61,47 @@ canvas {
 
 #collisionCanvas {
     display: none;
+}
+
+.pause {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    right: 20px;
+    bottom: 20px;
+    border-radius: 20px;
+    background-color: #000000aa;
+}
+
+.pause-button-container {
+    position: absolute;
+    bottom: 50px;
+    left: 0px;
+    right: 0px;
+    height: 500px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.pause-button {
+    width: 400px;
+    height: 400px;
+    background-image: url(textures/egg.svg);
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    transition: transform 0.3s ease;
+}
+
+#resume-button {
+    background-image: url(textures/resume.svg);
+}
+
+#exit-button {
+    background-image: url(textures/exit.svg);
+}
+
+.pause-button:hover {
+    transform: scale(1.1);
 }
